@@ -69,4 +69,5 @@ jobs:
           REGION: ${{ matrix.region }}
           ENV_NAME: ${{ matrix.env }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
-        run: node scripts/deploy-privnode.js
+        working-directory: ./.github/workflows/utility
+        run: node deploy_privnode.js
