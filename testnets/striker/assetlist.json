@@ -1,0 +1,28 @@
+{
+  "$schema": "../../assetlist.schema.json",
+  "chain_name": "striker",
+  "assets": [
+    {
+      "description": "Gas token of Striker",
+      "denom_units": [
+        {
+          "denom": "GAS",
+          "exponent": 0
+        }
+      ],
+      "base": "GAS",
+      "display": "GAS",
+      "name": "Striker Gas Token",
+      "symbol": "GAS",
+      "coingecko_id": "",
+      "images": [
+        {
+          "png": "https://raw.githubusercontent.com/initia-labs/initia-registry/main/images/MILK.png"
+        }
+      ],
+      "logo_URIs": {
+        "png": "https://raw.githubusercontent.com/initia-labs/initia-registry/main/images/MILK.png"
+      }
+    }
+  ]
+}
