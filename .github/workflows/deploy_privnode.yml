@@ -41,23 +41,20 @@ jobs:
         if: steps.changed.outputs.files != ''
         run: npm install firebase-admin axios
 
-      - name: Set derived env vars
+      - name: Set env vars & service account JSON
+        if: steps.changed.outputs.files != ''
+        working-directory: ./.github/workflows/utility
         run: |
           if [[ "${{ matrix.env }}" == "staging" ]]; then
             echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_STAGING }}" >> $GITHUB_ENV
-            echo "FIREBASE_SECRET=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" >> $GITHUB_ENV
+            echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" >> sa.json
             ENV_SUFFIX=".staging"
           else
             echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_PROD }}" >> $GITHUB_ENV
-            echo "FIREBASE_SECRET=${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
+            echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}" >> sa.json
             ENV_SUFFIX=""
           fi
           echo "BASE_URL=https://api.anvil.${{ matrix.region }}${ENV_SUFFIX}.initia.xyz" >> $GITHUB_ENV
-
-      - name: Write service account JSON
-        if: steps.changed.outputs.files != ''
-        working-directory: ./.github/workflows/utility
-        run: echo "$FIREBASE_SECRET" > sa.json
 
       - name: Deploy Privnode in ${{ matrix.region }}
         if: steps.changed.outputs.files != ''
