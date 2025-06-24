@@ -147,8 +147,6 @@ jobs:
             'Content-Type': 'application/json'
           };
 
-          const folders = ['testnets', 'mainnets'];
-
           async function deploy() {
             for (const file of changedFiles) {
               if (!fs.existsSync(file)) continue;
