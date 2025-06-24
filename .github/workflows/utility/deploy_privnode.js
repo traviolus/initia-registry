@@ -65,12 +65,12 @@ async function deployPrivnodes(idToken) {
             const data = res.data;
 
             if (!data || Object.keys(data).length === 0) {
-                console.log(`[SKIP] ${chainId} not found in ${process.env.REGION}`);
+                process.stdout.write(`[SKIP] ${chainId} not found in ${process.env.REGION}`);
                 continue;
             }
 
             if (data.privnode) {
-                console.log(`[SKIP] ${chainId} already has privnode`);
+                process.stdout.write(`[SKIP] ${chainId} already has privnode`);
                 continue;
             }
 
@@ -105,12 +105,12 @@ async function deployPrivnodes(idToken) {
 
             const postUrl = `${url}/privnode`;
             await axios.post(postUrl, payload, { headers });
-            console.log(`[DEPLOYED] ${chainId} privnode deployed in ${process.env.REGION}`);
+            process.stdout.write(`[DEPLOYED] ${chainId} privnode deployed in ${process.env.REGION}\n`);
         } catch (err) {
             if (err.response?.status === 404 || err.response?.data === null) {
-                console.log(`[SKIP] ${chainId} not found (404/null)`);
+                process.stdout.write(`[SKIP] ${chainId} not found (404/null)\n`);
             } else {
-                console.error(`[ERROR] ${chainId}: `, err.message);
+                process.stderr.write(`[ERROR] ${chainId}: `, err.message);
             }
         }
     }
@@ -121,7 +121,7 @@ async function deployPrivnodes(idToken) {
         const idToken = await getFirebaseIdToken();
         await deployPrivnodes(idToken);
     } catch (err) {
-        console.error('[FATAL ERROR]', err);
+        process.stderr.write('[FATAL ERROR]', err);
         process.exit(1);
     }
 })();
