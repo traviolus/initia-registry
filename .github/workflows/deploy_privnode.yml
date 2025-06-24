@@ -14,27 +14,8 @@ jobs:
 
     strategy:
       matrix:
-        include:
-          - region: asia-southeast
-            env: staging
-            base_url: https://api.anvil.asia-southeast.staging.initia.xyz
-            firebase_secret: FIREBASE_SERVICE_ACCOUNT_STAGING
-            api_key_secret: FIREBASE_API_KEY_STAGING
-          - region: asia-southeast
-            env: prod
-            base_url: https://api.anvil.asia-southeast.initia.xyz
-            firebase_secret: FIREBASE_SERVICE_ACCOUNT_PROD
-            api_key_secret: FIREBASE_API_KEY_PROD
-          - region: europe-west
-            env: staging
-            base_url: https://api.anvil.europe-west.staging.initia.xyz
-            firebase_secret: FIREBASE_SERVICE_ACCOUNT_STAGING
-            api_key_secret: FIREBASE_API_KEY_STAGING
-          - region: europe-west
-            env: prod
-            base_url: https://api.anvil.europe-west.initia.xyz
-            firebase_secret: FIREBASE_SERVICE_ACCOUNT_PROD
-            api_key_secret: FIREBASE_API_KEY_PROD
+        region: [ asia-southeast, europe-west ]
+        env: [ staging, prod ]
 
     steps:
       - name: Checkout code
@@ -60,16 +41,29 @@ jobs:
         if: steps.changed.outputs.files != ''
         run: npm install firebase-admin axios
 
+      - name: Set derived env vars
+        run: |
+          if [[ "${{ matrix.env }}" == "staging" ]]; then
+            echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_STAGING }}" >> $GITHUB_ENV
+            echo "FIREBASE_SECRET=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}" >> $GITHUB_ENV
+            ENV_SUFFIX=".staging"
+          else
+            echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_PROD }}" >> $GITHUB_ENV
+            echo "FIREBASE_SECRET=${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
+            ENV_SUFFIX=""
+          fi
+          echo "BASE_URL=https://api.anvil.${{ matrix.region }}${ENV_SUFFIX}.initia.xyz" >> $GITHUB_ENV
+
       - name: Write service account JSON
         if: steps.changed.outputs.files != ''
         working-directory: ./.github/workflows/utility
-        run: echo '${{ secrets[matrix.firebase_secret] }}' > sa.json
+        run: echo "$FIREBASE_SECRET" > sa.json
 
       - name: Deploy Privnode in ${{ matrix.region }}
         if: steps.changed.outputs.files != ''
         env:
-          FIREBASE_API_KEY: ${{ secrets[matrix.api_key_secret] }}
-          BASE_URL: ${{ matrix.base_url }}
+          FIREBASE_API_KEY: ${{ env.FIREBASE_API_KEY }}
+          BASE_URL: ${{ env.BASE_URL }}
           REGION: ${{ matrix.region }}
           ENV_NAME: ${{ matrix.env }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
