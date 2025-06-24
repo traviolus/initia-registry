@@ -3,9 +3,6 @@ const https = require('https');
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-const log = msg => process.stdout.write(msg + '\n');
-const error = msg => process.stderr.write(msg + '\n');
-
 async function getFirebaseIdToken() {
     const serviceAccount = JSON.parse(fs.readFileSync('sa.json'));
     const uid = "ci-user";
@@ -68,12 +65,12 @@ async function deployPrivnodes(idToken) {
             const data = res.data;
 
             if (!data || Object.keys(data).length === 0) {
-                log(`[SKIP] ${chainId} not found in ${process.env.REGION}`);
+                console.log(`[SKIP] ${chainId} not found in ${process.env.REGION}`);
                 continue;
             }
 
             if (data.privnode) {
-                log(`[SKIP] ${chainId} already has privnode`);
+                console.log(`[SKIP] ${chainId} already has privnode`);
                 continue;
             }
 
@@ -108,12 +105,12 @@ async function deployPrivnodes(idToken) {
 
             const postUrl = `${url}/privnode`;
             await axios.post(postUrl, payload, { headers });
-            log(`[DEPLOYED] ${chainId} privnode deployed in ${process.env.REGION}`);
+            console.log(`[DEPLOYED] ${chainId} privnode deployed in ${process.env.REGION}`);
         } catch (err) {
             if (err.response?.status === 404 || err.response?.data === null) {
-                log(`[SKIP] ${chainId} not found (404/null)`);
+                console.log(`[SKIP] ${chainId} not found (404/null)`);
             } else {
-                error(`[ERROR] ${chainId}: `, err.message);
+                console.error(`[ERROR] ${chainId}: `, err.message);
             }
         }
     }
@@ -124,7 +121,7 @@ async function deployPrivnodes(idToken) {
         const idToken = await getFirebaseIdToken();
         await deployPrivnodes(idToken);
     } catch (err) {
-        error('[FATAL ERROR]', err);
+        console.error('[FATAL ERROR]', err);
         process.exit(1);
     }
 })();

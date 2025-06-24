@@ -43,7 +43,6 @@ jobs:
 
       - name: Set env vars & service account JSON
         if: steps.changed.outputs.files != ''
-        working-directory: ./.github/workflows/utility
         run: |
           if [[ "${{ matrix.env }}" == "staging" ]]; then
             echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_STAGING }}" >> $GITHUB_ENV
@@ -64,5 +63,4 @@ jobs:
           REGION: ${{ matrix.region }}
           ENV_NAME: ${{ matrix.env }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
-        working-directory: ./.github/workflows/utility
-        run: node deploy_privnode.js
+        run: node ./.github/workflows/utility/deploy_privnode.js
