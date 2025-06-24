@@ -1,0 +1,207 @@
+name: Deploy Anvil Privnode
+
+on:
+  push:
+    paths:
+      - 'testnets/**/chain.json'
+      - 'mainnets/**/chain.json'
+    branches:
+      - main
+
+jobs:
+  deploy-privnode:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - region: asia-southeast
+            env: staging
+            base_url: https://api.anvil.asia-southeast.staging.initia.xyz
+            firebase_secret: FIREBASE_SERVICE_ACCOUNT_STAGING
+            api_key_secret: FIREBASE_API_KEY_STAGING
+          - region: asia-southeast
+            env: prod
+            base_url: https://api.anvil.asia-southeast.initia.xyz
+            firebase_secret: FIREBASE_SERVICE_ACCOUNT_PROD
+            api_key_secret: FIREBASE_API_KEY_PROD
+          - region: europe-west
+            env: staging
+            base_url: https://api.anvil.europe-west.staging.initia.xyz
+            firebase_secret: FIREBASE_SERVICE_ACCOUNT_STAGING
+            api_key_secret: FIREBASE_API_KEY_STAGING
+          - region: europe-west
+            env: prod
+            base_url: https://api.anvil.europe-west.initia.xyz
+            firebase_secret: FIREBASE_SERVICE_ACCOUNT_PROD
+            api_key_secret: FIREBASE_API_KEY_PROD
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install firebase-admin axios
+
+      - name: Write service account JSON
+        run: echo '${{ secrets[matrix.firebase_secret] }}' > sa.json
+
+      - name: Generate Firebase ID token
+        id: auth
+        run: |
+          node <<EOF
+          const admin = require('firebase-admin');
+          const fs = require('fs');
+          const https = require('https');
+
+          const serviceAccount = JSON.parse(fs.readFileSync('sa.json'));
+          const uid = "ci-user";
+
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+          });
+
+          async function main() {
+            try {
+              const customToken = await admin.auth().createCustomToken(uid);
+              const apiKey = "${{ secrets[matrix.api_key_secret] }}";
+              const body = JSON.stringify({
+                token: customToken,
+                returnSecureToken: true
+              });
+
+              const options = {
+                method: "POST",
+                hostname: "identitytoolkit.googleapis.com",
+                path: `/v1/accounts:signInWithCustomToken?key=${apiKey}`,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Content-Length": body.length
+                }
+              };
+
+              const req = https.request(options, res => {
+                let data = "";
+                res.on("data", chunk => data += chunk);
+                res.on("end", () => {
+                  const parsed = JSON.parse(data);
+                  if (!parsed.idToken) {
+                    console.error("Failed to get ID token:", data);
+                    process.exit(1);
+                  }
+                  console.log(`::add-mask::${parsed.idToken}`);
+                  console.log(`::set-output name=idToken::${parsed.idToken}`);
+                });
+              });
+
+              req.on("error", error => {
+                console.error("Request error:", error);
+                process.exit(1);
+              });
+
+              req.write(body);
+              req.end();
+            } catch (e) {
+              console.error(e);
+              process.exit(1);
+            }
+          }
+          
+          main();
+          EOF
+
+      - name: Deploy Privnode in ${{ matrix.region }}
+        env:
+          FIREBASE_AUTH: ${{ steps.auth.outputs.idToken }}
+          BASE_URL: ${{ matrix.base_url }}
+          REGION: ${{ matrix.region }}
+        run: |
+          node <<EOF
+          const fs = require('fs');
+          const path = require('path');
+          const axios = require('axios');
+
+          const headers = {
+            Authorization: `${process.env.FIREBASE_AUTH}`,
+            'Content-Type': 'application/json'
+          };
+
+          const folders = ['testnets', 'mainnets'];
+
+          async function deploy() {
+            for (const folder of folders) {
+              const dir = path.join(process.cwd(), folder);
+              if (!fs.existsSync(dir)) continue;
+
+              for (const chain of fs.readdirSync(dir)) {
+                const file = path.join(dir, chain, 'chain.json');
+                if (!fs.existsSync(file)) continue;
+
+                const content = JSON.parse(fs.readFileSync(file, 'utf-8'));
+                const chainId = content.chain_id;
+                const url = `${process.env.BASE_URL}/v2/admin/deployments/${chainId}`;
+
+                try {
+                  const res = await axios.get(url, { headers });
+                  const data = res.data;
+
+                  if (!data || Object.keys(data).length === 0) {
+                    console.log(`[SKIP] ${chainId} not found in ${process.env.REGION}`);
+                    continue;
+                  }
+
+                  if (data.privnode) {
+                    console.log(`[SKIP] ${chainId} already has privnode`);
+                    continue;
+                  }
+
+                  const image = data.minitia?.image?.minitia;
+                  const p2pPeers = data.peer_infos || [];
+                  const trustedPeers = p2pPeers.map(p => p.split('@')[0]);
+                  const baseRegion = data.base_region || process.env.REGION;
+                  const envSuffix = process.env.ENV === 'staging' ? '.staging' : '';
+
+                  const payload = {
+                    image: { privnode: image },
+                    privnode_config: {
+                      replicas: 1,
+                      rpc_url: `https://sequencer-rpc-${chainId}.anvil.${baseRegion}${envSuffix}.initia.xyz`,
+                      p2p_peers: p2pPeers,
+                      trusted_peer_ids: trustedPeers,
+                      state_sync: true,
+                      retain_height: "1024000"
+                    },
+                    resources: {
+                      privnode: {
+                        cpu: "2",
+                        memory: "2Gi"
+                      }
+                    },
+                    storage: {
+                      privnode: {
+                        requests: "20Gi"
+                      }
+                    }
+                  };
+
+                  const postUrl = `${url}/privnode`;
+                  await axios.post(postUrl, payload, { headers });
+                  console.log(`[DEPLOYED] ${chainId} privnode deployed in ${process.env.REGION}`);
+                } catch (err) {
+                  if (err.response?.status === 404 || err.response?.data === null) {
+                    console.log(`[SKIP] ${chainId} not found (404/null)`);
+                  } else {
+                    console.error(`[ERROR] ${chainId}: `, err.message);
+                  }
+                }
+              }
+            }
+          }
+
+          deploy();
+          EOF
